@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Dashboard VENDAS Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <style>
+        #drop-area{border:2px dashed #ccc;border-radius:10px;padding:30px;text-align:center;cursor:pointer;transition:all .2s}
+        #drop-area.highlight{border-color:#4f46e5;background-color:#f3f4f6}
+        .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background-color:rgba(0,0,0,.5)}
+        .modal-content{background-color:#fefefe;margin:5% auto;padding:20px;border-radius:10px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto}
+        .close{color:#aaa;float:right;font-size:28px;font-weight:700;cursor:pointer}
+        .close:hover{color:#000}
+    </style>
+<script>
+  tailwind.config = {
+    darkMode: 'class'
+  }
+</script>
+</head>
+<body class="bg-gray-50 p-4 sm:p-8">
+    <header class="mb-8">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-1">Dashboard VENDAS Pro</h1>
+        <p class="text-md text-gray-600 font-semibold">by Wesley A C | Consultor Executivo em BI para PMEs e RH com DISC & IA</p>
+        <a href="https://tinyurl.com/wac-solucoes" target="_blank" class="text-sm text-indigo-600 hover:text-indigo-800 transition duration-150">https://tinyurl.com/wac-solucoes</a>
+        <hr class="mt-4 border-t border-gray-200">
+    <button onclick="document.documentElement.classList.toggle('dark')" class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition duration-150 mb-4">🌙 Modo Escuro</button>
+</header>
+
+    <div id="lgpd-notice" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 rounded-lg shadow-md" role="alert">
+        <p class="font-bold">Aviso de Privacidade (LGPD)</p>
+        <p class="text-sm">Este dashboard é uma versão de testes/gratuita e **não coleta ou armazena dados em servidores externos**. Todas as informações inseridas são processadas e armazenadas **apenas no seu navegador** (Local Storage) e são de sua inteira responsabilidade. Ao usar, você concorda com o uso do Local Storage para persistência de dados.</p>
+    </div>
+
+    <div id="main-dashboard-content">
+        <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Insira os Dados</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div id="upload-option" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-gray-50 transition">
+                    <div class="text-4xl mb-2">📂</div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Upload de Arquivo</h3>
+                    <p class="text-sm text-gray-500">Faça upload de um arquivo CSV ou Excel</p>
+                </div>
+                <div id="manual-option" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-gray-50 transition">
+                    <div class="text-4xl mb-2">✏️</div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">Entrada Manual</h3>
+                    <p class="text-sm text-gray-500">Clique para registrar uma única venda</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="drop-area" class="bg-white shadow-lg mb-8 hidden">
+            <input type="file" id="fileElem" accept=".csv, .xlsx" multiple class="hidden">
+            <p class="text-gray-700 font-medium">Arraste e Solte seu arquivo (.csv ou .xlsx) AQUI</p>
+            <p class="text-sm text-gray-500 mt-1">Ou clique para selecionar o arquivo de vendas.</p>
+        </div>
+
+        <div id="controls-panel" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Controles e Filtros</h2>
+            
+            <div class="mb-4">
+                <label for="search-input" class="block text-sm font-medium text-gray-700 mb-2">🔍 Buscar Vendas</label>
+                <input type="text" id="search-input" placeholder="Digite para buscar por ID, representante, cliente ou produto..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Definir Período da Meta (Para Alertas)</label>
+                <div id="goal-buttons" class="flex flex-wrap gap-2">
+                    <button data-goal-type="annual" class="goal-btn bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Anual (R$ 5M)</button>
+                    <button data-goal-type="monthly" class="goal-btn bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Mensal (R$ 400K)</button>
+                    <button data-goal-type="weekly" class="goal-btn bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Semanal (R$ 90K)</button>
+                    <button data-goal-type="daily" class="goal-btn bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-600 transition">Diária (R$ 18K)</button>
+                </div>
+                <p id="current-goal-display" class="mt-2 text-sm text-gray-600 font-bold">Meta Atual: N/A</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label for="filter-month" class="block text-sm font-medium text-gray-700">Mês</label>
+                    <select id="filter-month" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                </div>
+                <div>
+                    <label for="filter-rep" class="block text-sm font-medium text-gray-700">Representante</label>
+                    <select id="filter-rep" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                </div>
+                <div>
+                    <label for="filter-client" class="block text-sm font-medium text-gray-700">Cliente</label>
+                    <select id="filter-client" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"></select>
+                </div>
+            </div>
+            <div class="flex gap-2 justify-between items-center">
+                <button id="export-excel-btn" class="bg-green-600 text-white px-5 py-2 rounded-lg text-base font-semibold hover:bg-green-700 transition">Exportar Excel</button>
+                <button id="clear-storage-btn" class="bg-red-600 text-white px-5 py-2 rounded-lg text-base font-semibold hover:bg-red-700 transition">Limpar Dados Locais</button>
+            </div>
+        </div>
+
+        <div id="kpi-panel" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div id="kpi-total-sales" class="kpi-card p-6 rounded-xl shadow-lg transition duration-300" style="background:linear-gradient(135deg,#10b981,#059669)">
+                <p class="text-sm font-medium text-white opacity-80">Valor Total de Vendas</p>
+                <p class="text-3xl font-bold text-white mt-1">R$ 0,00</p>
+                <p class="text-xs text-white opacity-90 mt-2 font-bold" id="kpi-total-sales-status">Status: Carregando...</p>
+            </div>
+            <div id="kpi-ticket-medio" class="kpi-card p-6 rounded-xl shadow-lg transition duration-300" style="background:linear-gradient(135deg,#4f46e5,#3730a3)">
+                <p class="text-sm font-medium text-white opacity-80">Ticket Médio</p>
+                <p class="text-3xl font-bold text-white mt-1">R$ 0,00</p>
+                <p class="text-xs text-white opacity-90 mt-2" id="kpi-ticket-medio-status">Comparação: Carregando...</p>
+            </div>
+            <div id="kpi-orders" class="kpi-card p-6 rounded-xl shadow-lg transition duration-300" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+                <p class="text-sm font-medium text-white opacity-80">Total de Pedidos Fechados</p>
+                <p class="text-3xl font-bold text-white mt-1">0</p>
+                <p class="text-xs text-white opacity-90 mt-2" id="kpi-orders-status">Comparação: Carregando...</p>
+            </div>
+            <div id="kpi-top-product" class="kpi-card p-6 rounded-xl shadow-lg transition duration-300" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
+                <p class="text-sm font-medium text-white opacity-80">Produto Mais Vendido</p>
+                <p class="text-xl font-bold text-white mt-2" id="kpi-top-product-value">N/A</p>
+                <p class="text-xs text-white opacity-90 mt-3" id="kpi-top-product-status">Maior Volume (Qtd)</p>
+            </div>
+        </div>
+
+        <div id="chart-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div id="chart-rep-container" class="bg-white p-6 rounded-xl shadow-lg">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Ranking de Representantes (Valor)</h3>
+                <canvas id="rep-chart"></canvas>
+            </div>
+            <div id="chart-product-container" class="bg-white p-6 rounded-xl shadow-lg">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Top 5 Produtos por Valor</h3>
+                <canvas id="product-chart"></canvas>
+            </div>
+        </div>
+
+        <div id="ranking-panel" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Ranking de Vendedores (Ação Imediata)</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Representante</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket Médio</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ranking-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Linhas do ranking serão inseridas aqui -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="sales-panel" class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Tabela de Vendas</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pedido</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Representante</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Linhas da tabela serão inseridas aqui -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <button id="prev-page" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-400 transition">Anterior</button>
+                <span id="page-info" class="text-sm text-gray-600">Página 1 de 1</span>
+                <button id="next-page" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-400 transition">Próxima</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Adicionar Entrada -->
+    <div id="add-entry-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-add-modal" class="close">&times;</span>
+            <h2 class="text-xl font-semibold mb-4">Adicionar Nova Venda</h2>
+            <form id="add-entry-form">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" id="entry-id" placeholder="ID Pedido" class="w-full p-2 border rounded">
+                    <input type="date" id="entry-date" class="w-full p-2 border rounded">
+                    <input type="text" id="entry-rep" placeholder="Representante" class="w-full p-2 border rounded">
+                    <input type="text" id="entry-client" placeholder="Cliente" class="w-full p-2 border rounded">
+                    <input type="text" id="entry-product" placeholder="Produto" class="w-full p-2 border rounded">
+                    <input type="number" step="0.01" id="entry-value" placeholder="Valor Total Venda" class="w-full p-2 border rounded">
+                    <input type="text" id="entry-month" placeholder="Mês (ex: Jan)" class="w-full p-2 border rounded">
+                </div>
+                <button type="submit" class="mt-4 w-full bg-indigo-600 text-white p-2 rounded-lg font-semibold hover:bg-indigo-700">Adicionar Venda</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Editar Entrada -->
+    <div id="edit-entry-modal" class="modal">
+        <div class="modal-content">
+            <span id="close-edit-modal" class="close">&times;</span>
+            <h2 class="text-xl font-semibold mb-4">Editar Venda</h2>
+            <form id="edit-entry-form">
+                <input type="hidden" id="edit-db-id">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" id="edit-id" placeholder="ID Pedido" class="w-full p-2 border rounded">
+                    <input type="date" id="edit-date" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-rep" placeholder="Representante" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-client" placeholder="Cliente" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-product" placeholder="Produto" class="w-full p-2 border rounded">
+                    <input type="number" step="0.01" id="edit-value" placeholder="Valor Total Venda" class="w-full p-2 border rounded">
+                    <input type="text" id="edit-month" placeholder="Mês (ex: Jan)" class="w-full p-2 border rounded">
+                </div>
+                <button type="submit" class="mt-4 w-full bg-indigo-600 text-white p-2 rounded-lg font-semibold hover:bg-indigo-700">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let data = [];
+        let filteredData = [];
+        let searchFilteredData = [];
+        let currentPage = 1;
+        const itemsPerPage = 10;
+        let repChart = null;
+        let productChart = null;
+        let currentGoal = { type: 'none', target: 0 };
+        const localStorageKey = 'dashboardVendasData';
+
+        // --- Funções de Persistência com LocalStorage ---
+        function loadDataFromStorage() {
+            const storedData = localStorage.getItem(localStorageKey);
+            return storedData ? JSON.parse(storedData) : [];
+        }
+
+        function saveDataToStorage(newSales) {
+            let currentData = loadDataFromStorage();
+            const updatedData = [...currentData, ...newSales.map(sale => ({ ...sale, id: Date.now() + Math.random() }))];
+            localStorage.setItem(localStorageKey, JSON.stringify(updatedData));
+            setData(updatedData);
+        }
+
+        function updateDataInStorage(dbId, updatedData) {
+            let currentData = loadDataFromStorage();
+            const index = currentData.findIndex(item => item.id == dbId);
+            if (index !== -1) {
+                currentData[index] = { ...currentData[index], ...updatedData };
+                localStorage.setItem(localStorageKey, JSON.stringify(currentData));
+                setData(currentData);
+            }
+        }
+
+        function deleteDataFromStorage(dbId) {
+            let currentData = loadDataFromStorage();
+            const updatedData = currentData.filter(item => item.id != dbId);
+            localStorage.setItem(localStorageKey, JSON.stringify(updatedData));
+            setData(updatedData);
+        }
+        // ------------------------------------------------
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+        }
+
+        function setData(newData) {
+            data = newData;
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const month = document.getElementById('filter-month').value;
+            const rep = document.getElementById('filter-rep').value;
+            const client = document.getElementById('filter-client').value;
+
+            filteredData = data.filter(d => 
+                (month === 'all' || d['Mês'] === month) &&
+                (rep === 'all' || d['Representante'] === rep) &&
+                (client === 'all' || d['Cliente'] === client)
+            );
+            applySearch();
+        }
+
+        function applySearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            searchFilteredData = filteredData.filter(d => 
+                Object.values(d).some(val => 
+                    String(val).toLowerCase().includes(searchTerm)
+                )
+            );
+            currentPage = 1;
+            renderAll();
+        }
+
+        function renderAll() {
+            updateKPIs();
+            renderSalesTable();
+            updateFilterOptions();
+            updateRankingTable();
+            updateCharts();
+        }
+
+        function updateKPIs() {
+            const totalSales = searchFilteredData.reduce((sum, d) => sum + parseFloat(d['Valor Total Venda']), 0);
+            const totalOrders = searchFilteredData.length;
+            const ticketMedio = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+            document.querySelector('#kpi-total-sales p:nth-child(2)').textContent = formatCurrency(totalSales);
+            document.querySelector('#kpi-ticket-medio p:nth-child(2)').textContent = formatCurrency(ticketMedio);
+            document.querySelector('#kpi-orders p:nth-child(2)').textContent = totalOrders;
+
+            // Status da meta
+            const goalStatusEl = document.getElementById('kpi-total-sales-status');
+            if (currentGoal.target > 0) {
+                const percentage = (totalSales / currentGoal.target) * 100;
+                goalStatusEl.textContent = `Meta: ${percentage.toFixed(1)}% de ${formatCurrency(currentGoal.target)}`;
+            } else {
+                goalStatusEl.textContent = 'Defina uma meta nos controles';
+            }
+
+            // Top produto
+            const productCounts = searchFilteredData.reduce((acc, d) => {
+                acc[d['Produto']] = (acc[d['Produto']] || 0) + 1;
+                return acc;
+            }, {});
+            const topProduct = Object.entries(productCounts).sort((a, b) => b[1] - a[1])[0];
+            document.getElementById('kpi-top-product-value').textContent = topProduct ? topProduct[0] : 'N/A';
+        }
+
+        function renderSalesTable() {
+            const tbody = document.getElementById('sales-table-body');
+            tbody.innerHTML = '';
+            const paginatedData = searchFilteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+            if (paginatedData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Nenhum dado encontrado.</td></tr>';
+            }
+
+            paginatedData.forEach(d => {
+                const row = `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${d['ID Pedido']}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${d['Data do Pedido']}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${d['Representante']}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${d['Cliente']}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${d['Produto']}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">${formatCurrency(d['Valor Total Venda'])}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                            <button onclick="openEditModal('${d.id}')" class="text-indigo-600 hover:text-indigo-900">Editar</button>
+                            <button onclick="deleteSale('${d.id}')" class="text-red-600 hover:text-red-900 ml-4">Excluir</button>
+                        </td>
+                    </tr>`;
+                tbody.innerHTML += row;
+            });
+
+            const totalPages = Math.ceil(searchFilteredData.length / itemsPerPage);
+            document.getElementById('page-info').textContent = `Página ${currentPage} de ${totalPages || 1}`;
+            document.getElementById('prev-page').disabled = currentPage === 1;
+            document.getElementById('next-page').disabled = currentPage === totalPages || totalPages === 0;
+        }
+
+        function updateFilterOptions() {
+            const months = [...new Set(data.map(d => d['Mês']))];
+            const reps = [...new Set(data.map(d => d['Representante']))];
+            const clients = [...new Set(data.map(d => d['Cliente']))];
+
+            const monthSelect = document.getElementById('filter-month');
+            const repSelect = document.getElementById('filter-rep');
+            const clientSelect = document.getElementById('filter-client');
+
+            const currentMonth = monthSelect.value;
+            const currentRep = repSelect.value;
+            const currentClient = clientSelect.value;
+
+            monthSelect.innerHTML = '<option value="all">Todos os Meses</option>' + months.map(m => `<option value="${m}">${m}</option>`).join('');
+            repSelect.innerHTML = '<option value="all">Todos os Representantes</option>' + reps.map(r => `<option value="${r}">${r}</option>`).join('');
+            clientSelect.innerHTML = '<option value="all">Todos os Clientes</option>' + clients.map(c => `<option value="${c}">${c}</option>`).join('');
+
+            monthSelect.value = currentMonth;
+            repSelect.value = currentRep;
+            clientSelect.value = currentClient;
+        }
+
+        function updateRankingTable() {
+            const repSales = searchFilteredData.reduce((acc, d) => {
+                const rep = d['Representante'];
+                const value = parseFloat(d['Valor Total Venda']);
+                if (!acc[rep]) acc[rep] = { total: 0, count: 0 };
+                acc[rep].total += value;
+                acc[rep].count++;
+                return acc;
+            }, {});
+
+            const sortedReps = Object.entries(repSales).sort((a, b) => b[1].total - a[1].total);
+
+            const tbody = document.getElementById('ranking-table-body');
+            tbody.innerHTML = '';
+            sortedReps.forEach(([rep, stats], idx) => {
+                const repAvg = stats.count > 0 ? stats.total / stats.count : 0;
+                const statusText = stats.total > 50000 ? 'Meta Atingida' : 'Abaixo da Meta';
+                const statusClass = stats.total > 50000 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                tbody.innerHTML += `<tr class="hover:bg-gray-50 transition"><td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${idx + 1}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${rep}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">${formatCurrency(stats.total)}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">${formatCurrency(repAvg)}</td><td class="px-6 py-4 whitespace-nowrap text-sm"><span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">${statusText}</span></td></tr>`;
+            });
+        }
+
+        function updateCharts() {
+            // Top 5 produtos por valor
+            const productSales = searchFilteredData.reduce((acc, d) => {
+                const prod = d['Produto'];
+                const value = parseFloat(d['Valor Total Venda']);
+                acc[prod] = (acc[prod] || 0) + value;
+                return acc;
+            }, {});
+            const topProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            updateProductChart(topProducts);
+
+            // Ranking de representantes por valor
+            const repSales = searchFilteredData.reduce((acc, d) => {
+                const rep = d['Representante'];
+                const value = parseFloat(d['Valor Total Venda']);
+                acc[rep] = (acc[rep] || 0) + value;
+                return acc;
+            }, {});
+            const topReps = Object.entries(repSales).sort((a, b) => b[1] - a[1]);
+            updateRepChart(topReps);
+        }
+
+        function updateProductChart(topProds) {
+            if (productChart) productChart.destroy();
+            if (topProds.length === 0) return;
+            const ctx = document.getElementById('product-chart').getContext('2d');
+            productChart = new Chart(ctx, {
+                type: 'bar', data: { labels: topProds.map(p => p[0]), datasets: [{ label: 'Top 5 Produtos', data: topProds.map(p => p[1]), backgroundColor: 'rgba(239, 68, 68, 0.8)', borderColor: 'rgba(239, 68, 68, 1)', borderWidth: 1, borderRadius: 5 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } } } }
+            });
+        }
+
+        function updateRepChart(topReps) {
+            if (repChart) repChart.destroy();
+            if (topReps.length === 0) return;
+            const ctx = document.getElementById('rep-chart').getContext('2d');
+            repChart = new Chart(ctx, {
+                type: 'bar', data: { labels: topReps.map(r => r[0]), datasets: [{ label: 'Vendas', data: topReps.map(r => r[1]), backgroundColor: 'rgba(79, 70, 229, 0.8)', borderColor: 'rgba(79, 70, 229, 1)', borderWidth: 1, borderRadius: 5 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { callback: v => formatCurrency(v) } } } }
+            });
+        }
+
+        function deleteSale(dbId) {
+            if (!confirm('Tem certeza que deseja excluir esta venda?')) return;
+            deleteDataFromStorage(dbId);
+        }
+
+        function updateSale(dbId, updatedData) {
+            updateDataInStorage(dbId, updatedData);
+        }
+
+        function setupGoalButtons() {
+            document.getElementById('goal-buttons').addEventListener('click', e => {
+                const btn = e.target.closest('.goal-btn');
+                if (!btn) return;
+                const type = btn.dataset.goalType;
+                let target;
+                switch(type) {
+                    case 'annual': target = 5000000; break;
+                    case 'monthly': target = 400000; break;
+                    case 'weekly': target = 90000; break;
+                    case 'daily': target = 18000; break;
+                }
+                currentGoal = { type, target };
+                document.getElementById('current-goal-display').textContent = `Meta Atual: ${type.charAt(0).toUpperCase() + type.slice(1)} - ${formatCurrency(target)}`;
+                applyFilters();
+            });
+        }
+
+        function initializeDashboard() {
+            const data = loadDataFromStorage();
+            setData(data);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDashboard();
+
+            document.getElementById('search-input').addEventListener('input', applySearch);
+
+            document.getElementById('clear-storage-btn').addEventListener('click', () => {
+                if (confirm('ATENÇÃO: Isso irá APAGAR TODOS os dados salvos no seu navegador. Tem certeza?')) {
+                    localStorage.removeItem(localStorageKey);
+                    initializeDashboard();
+                    alert('Dados locais limpos com sucesso!');
+                }
+            });
+
+            const dropArea = document.getElementById('drop-area');
+            const fileElem = document.getElementById('fileElem');
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => dropArea.addEventListener(evt, preventDefaults, false));
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropArea.classList.remove('highlight');
+                if (e.type === 'dragenter' || e.type === 'dragover') dropArea.classList.add('highlight');
+                if (e.type === 'drop') parseFile(e.dataTransfer.files[0]);
+            }
+            dropArea.addEventListener('click', () => fileElem.click());
+            fileElem.addEventListener('change', function() { parseFile(this.files[0]); });
+            document.getElementById('upload-option').addEventListener('click', () => dropArea.classList.toggle('hidden'));
+            
+            const addModal = document.getElementById('add-entry-modal');
+            const editModal = document.getElementById('edit-entry-modal');
+            document.getElementById('manual-option').addEventListener('click', () => addModal.style.display = 'block');
+            document.getElementById('close-add-modal').onclick = () => addModal.style.display = 'none';
+            document.getElementById('close-edit-modal').onclick = () => editModal.style.display = 'none';
+            window.onclick = e => { 
+                if (e.target == addModal) addModal.style.display = 'none'; 
+                if (e.target == editModal) editModal.style.display = 'none'; 
+            };
+
+            document.getElementById('add-entry-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const entry = {
+                    'ID Pedido': document.getElementById('entry-id').value,
+                    'Data do Pedido': document.getElementById('entry-date').value,
+                    'Representante': document.getElementById('entry-rep').value,
+                    'Cliente': document.getElementById('entry-client').value,
+                    'Produto': document.getElementById('entry-product').value,
+                    'Valor Total Venda': document.getElementById('entry-value').value,
+                    'Mês': document.getElementById('entry-month').value
+                };
+                saveDataToStorage([entry]);
+                addModal.style.display = 'none';
+                this.reset();
+            });
+
+            document.getElementById('edit-entry-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const dbId = document.getElementById('edit-db-id').value;
+                const updatedData = {
+                    'ID Pedido': document.getElementById('edit-id').value,
+                    'Data do Pedido': document.getElementById('edit-date').value,
+                    'Representante': document.getElementById('edit-rep').value,
+                    'Cliente': document.getElementById('edit-client').value,
+                    'Produto': document.getElementById('edit-product').value,
+                    'Valor Total Venda': document.getElementById('edit-value').value,
+                    'Mês': document.getElementById('edit-month').value
+                };
+                updateSale(dbId, updatedData);
+                editModal.style.display = 'none';
+            });
+
+            document.getElementById('prev-page').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderSalesTable();
+                }
+            });
+
+            document.getElementById('next-page').addEventListener('click', () => {
+                const totalPages = Math.ceil(searchFilteredData.length / itemsPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderSalesTable();
+                }
+            });
+
+            document.getElementById('filter-month').addEventListener('change', applyFilters);
+            document.getElementById('filter-rep').addEventListener('change', applyFilters);
+            document.getElementById('filter-client').addEventListener('change', applyFilters);
+
+            document.getElementById('export-excel-btn').addEventListener('click', () => {
+                const exportData = searchFilteredData.map(d => ({ 'Mês': d.Mês, 'Representante': d.Representante, 'Cliente': d.Cliente, 'Produto': d.Produto, 'Valor Total Venda': d['Valor Total Venda'] }));
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Vendas');
+                XLSX.writeFile(wb, 'dashboard_vendas.xlsx');
+            });
+
+            window.openEditModal = function(id) {
+                const sale = data.find(d => d.id == id);
+                if (sale) {
+                    document.getElementById('edit-db-id').value = sale.id;
+                    document.getElementById('edit-id').value = sale['ID Pedido'];
+                    document.getElementById('edit-date').value = sale['Data do Pedido'];
+                    document.getElementById('edit-rep').value = sale['Representante'];
+                    document.getElementById('edit-client').value = sale['Cliente'];
+                    document.getElementById('edit-product').value = sale['Produto'];
+                    document.getElementById('edit-value').value = sale['Valor Total Venda'];
+                    document.getElementById('edit-month').value = sale['Mês'];
+                    document.getElementById('edit-entry-modal').style.display = 'block';
+                }
+            }
+
+            setupGoalButtons();
+        });
+
+        function parseFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const fileData = e.target.result;
+                let jsonData;
+                if (file.name.endsWith('.csv')) {
+                    Papa.parse(fileData, {
+                        header: true,
+                        complete: function(results) {
+                            jsonData = results.data.filter(row => Object.values(row).some(val => val)); // Remove empty rows
+                            saveDataToStorage(jsonData);
+                        }
+                    });
+                } else if (file.name.endsWith('.xlsx')) {
+                    const workbook = XLSX.read(fileData, { type: 'binary' });
+                    const firstSheet = workbook.SheetNames[0];
+                    jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+                    saveDataToStorage(jsonData);
+                }
+            };
+            if (file.name.endsWith('.csv')) {
+                reader.readAsText(file);
+            } else if (file.name.endsWith('.xlsx')) {
+                reader.readAsBinaryString(file);
+            }
+        }
+    </script>
+</body>
+</html>
